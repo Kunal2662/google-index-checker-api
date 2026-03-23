@@ -41,6 +41,11 @@ async def check_index(request: CheckRequest):
             if not url.startswith("http"):
                 url = "https://" + url
 
+            # KEY FIX: strip https:// from site: query
+            # "site:https://example.com" returns 0 results
+            # "site:example.com/page" returns correct results
+            clean_url = url.replace("https://", "").replace("http://", "")
+
             try:
                 resp = await client.post(
                     "https://google.serper.dev/search",
@@ -49,7 +54,7 @@ async def check_index(request: CheckRequest):
                         "Content-Type": "application/json"
                     },
                     json={
-                        "q": f"site:{url}",
+                        "q": f"site:{clean_url}",
                         "num": 1,
                         "gl": "us",
                         "hl": "en"
@@ -58,8 +63,9 @@ async def check_index(request: CheckRequest):
 
                 data = resp.json()
 
-                # Check if page is indexed
-                total = int(data.get("searchInformation", {}).get("totalResults", 0))
+                # totalResults can be "1,230" with commas — strip them
+                raw_total = data.get("searchInformation", {}).get("totalResults", "0")
+                total = int(str(raw_total).replace(",", ""))
                 has_organic = len(data.get("organic", [])) > 0
                 has_answer = "answerBox" in data
                 has_knowledge = "knowledgeGraph" in data
@@ -75,7 +81,7 @@ async def check_index(request: CheckRequest):
                 "url": url,
                 "is_indexed": is_indexed,
                 "checked_at": datetime.utcnow().isoformat(),
-                "verify_link": f"https://www.google.com/search?q=site:{url}"
+                "verify_link": f"https://www.google.com/search?q=site:{clean_url}"
             })
 
     return {
